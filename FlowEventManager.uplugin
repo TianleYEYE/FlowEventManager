@@ -6,7 +6,6 @@
 	"Description": "Manage timed serial and parallel Blueprint event flows in a level.",
 	"Category": "Blueprints",
 	"CreatedBy": "Codex",
-	"EngineVersion": "5.4.0",
 	"CanContainContent": false,
 	"Installed": false,
 	"Modules": [

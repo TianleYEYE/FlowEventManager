@@ -1,6 +1,7 @@
 #include "Graph/FlowEventEdGraphNode.h"
 
 #include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
 
 #define LOCTEXT_NAMESPACE "FlowEventEdGraphNode"
 
