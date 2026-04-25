@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"FriendlyName": "Flow Event Manager",
+	"Description": "Manage timed serial and parallel Blueprint event flows in a level.",
+	"Category": "Blueprints",
+	"CreatedBy": "Codex",
+	"EngineVersion": "5.4.0",
+	"CanContainContent": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "FlowEventManager",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "FlowEventManagerEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}

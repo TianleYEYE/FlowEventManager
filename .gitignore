@@ -1,0 +1,29 @@
+# Unreal generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Build products
+*.dll
+*.dylib
+*.exe
+*.exp
+*.lib
+*.obj
+*.pdb
+*.so
+
+# IDE and user-local files
+.idea/
+.vs/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.VC.db
+*.VC.opendb
+
+# OS files
+.DS_Store
+Thumbs.db
