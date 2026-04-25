@@ -8,9 +8,11 @@ This plugin is maintained as a single multi-version branch for Unreal Engine 5.x
 
 | Unreal Engine | Status |
 | --- | --- |
+| 5.3 | Supported |
 | 5.4 | Supported |
 | 5.5 | Supported |
 | 5.6 | Supported |
+| 5.7 | Supported |
 
 The `.uplugin` file intentionally does not pin `EngineVersion`, so the same checkout can be used across supported UE 5.x projects. If Epic changes editor APIs in a future engine release, compatibility should be handled with version guards in the editor module instead of splitting the runtime module.
 
@@ -85,3 +87,5 @@ Before publishing a release, validate the plugin against each supported engine v
 Use paths that match your local Unreal Engine installation and project layout.
 
 Release notes are maintained in `CHANGELOG.md`.
+
+The plugin icon is stored at `Resources/Icon128.png`.
