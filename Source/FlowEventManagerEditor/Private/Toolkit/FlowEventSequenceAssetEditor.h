@@ -40,11 +40,19 @@ private:
 	void OnFinishedChangingProperties(const FPropertyChangedEvent& PropertyChangedEvent);
 	void OnSelectedNodesChanged(const TSet<UObject*>& NewSelection);
 	void OnNodeDoubleClicked(UEdGraphNode* Node);
+	FReply OnValidateFlowClicked();
+	FReply OnAutoArrangeClicked();
+	FReply OnFixNodeIdsClicked();
+	void RefreshValidationResults();
+	FText GetValidationSummaryText() const;
+	FText GetValidationDetailsText() const;
 	void DeleteSelectedNodes();
 	bool CanDeleteSelectedNodes() const;
 
 	TArray<UFlowEventEdGraphNode*> GetOrderedGraphNodes() const;
 	UFlowEventEdGraphNode* CreateGraphNodeFromFlowNode(const FFlowEventNode& FlowNode, int32 SourceIndex, const FVector2D& FallbackPosition);
+	void AutoArrangeNodes();
+	void FixNodeIds();
 
 	TObjectPtr<UFlowEventSequenceAsset> FlowAsset = nullptr;
 	TObjectPtr<UEdGraph> EditorGraph = nullptr;
@@ -53,5 +61,7 @@ private:
 	TSharedPtr<SGraphEditor> GraphEditor;
 	TSharedPtr<IDetailsView> DetailsView;
 	TSharedPtr<FUICommandList> GraphEditorCommands;
+	FText ValidationSummaryText;
+	FText ValidationDetailsText;
 	bool bIsSynchronizing = false;
 };

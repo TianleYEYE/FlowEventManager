@@ -126,6 +126,84 @@ void UFlowEventManagerComponent::StopFlow(bool bBroadcastFinished)
 	}
 }
 
+TArray<int32> UFlowEventManagerComponent::GetActiveNodeIndices() const
+{
+	TArray<int32> NodeIndices;
+	ActiveNodes.GetKeys(NodeIndices);
+	NodeIndices.Sort();
+	return NodeIndices;
+}
+
+TArray<FName> UFlowEventManagerComponent::GetActiveNodeIds() const
+{
+	TArray<FName> NodeIds;
+	NodeIds.Reserve(ActiveNodes.Num());
+
+	for (const TPair<int32, FFlowEventRuntimeNode>& ActiveNode : ActiveNodes)
+	{
+		NodeIds.Add(ActiveNode.Value.NodeId);
+	}
+
+	return NodeIds;
+}
+
+bool UFlowEventManagerComponent::GetActiveNodeElapsedTime(FName NodeId, float& OutElapsedTime) const
+{
+	for (const TPair<int32, FFlowEventRuntimeNode>& ActiveNode : ActiveNodes)
+	{
+		if (ActiveNode.Value.NodeId == NodeId)
+		{
+			OutElapsedTime = ActiveNode.Value.ElapsedTime;
+			return true;
+		}
+	}
+
+	OutElapsedTime = 0.0f;
+	return false;
+}
+
+bool UFlowEventManagerComponent::GetActiveNodeProgress(FName NodeId, float& OutProgress) const
+{
+	const TArray<FFlowEventNode>* Nodes = GetConfiguredNodes();
+	if (!Nodes)
+	{
+		OutProgress = 0.0f;
+		return false;
+	}
+
+	for (const TPair<int32, FFlowEventRuntimeNode>& ActiveNode : ActiveNodes)
+	{
+		if (ActiveNode.Value.NodeId != NodeId || !Nodes->IsValidIndex(ActiveNode.Key))
+		{
+			continue;
+		}
+
+		const float Duration = FMath::Max(0.0f, (*Nodes)[ActiveNode.Key].EventDuration);
+		OutProgress = Duration > 0.0f ? FMath::Clamp(ActiveNode.Value.ElapsedTime / Duration, 0.0f, 1.0f) : 1.0f;
+		return true;
+	}
+
+	OutProgress = 0.0f;
+	return false;
+}
+
+void UFlowEventManagerComponent::ValidateConfiguredFlow(TArray<FFlowEventValidationIssue>& OutIssues) const
+{
+	const TArray<FFlowEventNode>* Nodes = GetConfiguredNodes();
+	if (!Nodes)
+	{
+		OutIssues.Reset();
+		FFlowEventValidationIssue Issue;
+		Issue.Severity = EFlowEventValidationSeverity::Error;
+		Issue.NodeIndex = INDEX_NONE;
+		Issue.Message = NSLOCTEXT("FlowEventManagerComponent", "NoConfiguredNodes", "No flow nodes are configured. Enable InlineNodes or assign a FlowAsset.");
+		OutIssues.Add(Issue);
+		return;
+	}
+
+	UFlowEventSequenceAsset::ValidateNodes(*Nodes, OutIssues);
+}
+
 void UFlowEventManagerComponent::FinishNodeEarly(FName NodeId)
 {
 	int32 NodeIndexToFinish = INDEX_NONE;

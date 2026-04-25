@@ -50,6 +50,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager")
 	bool IsFlowRunning() const { return bFlowRunning; }
 
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Runtime State")
+	int32 GetActiveNodeCount() const { return ActiveNodes.Num(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Runtime State")
+	TArray<int32> GetActiveNodeIndices() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Runtime State")
+	TArray<FName> GetActiveNodeIds() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Runtime State")
+	bool GetActiveNodeElapsedTime(FName NodeId, float& OutElapsedTime) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Runtime State")
+	bool GetActiveNodeProgress(FName NodeId, float& OutProgress) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Runtime State")
+	int32 GetPendingStartCount() const { return PendingStartCount; }
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager|Validation")
+	void ValidateConfiguredFlow(TArray<FFlowEventValidationIssue>& OutIssues) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager")
 	void FinishNodeEarly(FName NodeId);
 

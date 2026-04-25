@@ -33,6 +33,9 @@ The `.uplugin` file intentionally does not pin `EngineVersion`, so the same chec
 - Double-click a `Flow Event Sequence` asset to open the visual node editor.
 - Right-click the graph and choose `Add Flow Event Node` to add steps.
 - Connect an output pin to an input pin to set the next node. The graph editor writes back to the asset's `Nodes` array.
+- Use `Validate Flow` in the details panel to find missing targets, duplicate node ids, invalid links, unreachable nodes, and cycles before runtime.
+- Use `Fix Node IDs` to assign unique ids to empty or duplicate nodes.
+- Use `Auto Arrange` to quickly lay out nodes from left to right.
 - Existing assets that leave `NextNodeIndex` as `-1` keep the original implicit sequential behavior.
 
 ## Node Timing
@@ -41,6 +44,25 @@ The `.uplugin` file intentionally does not pin `EngineVersion`, so the same chec
 - `Parallel`: the next node starts after `ParallelStartDelay`, while the current node continues until `EventDuration`.
 
 Example: node 1 has `EventDuration = 5`, `NextMode = Parallel`, `ParallelStartDelay = 2`. Node 2 starts two seconds after node 1 starts, and node 1 still finishes at five seconds.
+
+## Runtime Debugging
+
+`FlowEventManagerComponent` exposes Blueprint-callable runtime state helpers:
+
+- `GetActiveNodeCount`
+- `GetActiveNodeIndices`
+- `GetActiveNodeIds`
+- `GetActiveNodeElapsedTime`
+- `GetActiveNodeProgress`
+- `GetPendingStartCount`
+
+Use these functions to build in-game debug widgets, editor utility tools, or automated tests around active flow execution.
+
+## Validation
+
+`Flow Event Sequence` assets expose `ValidateFlow`, which returns structured validation issues with severity, node index, node id, and message. The editor calls the same API, so validation behavior is consistent between tools and runtime/editor scripting.
+
+For inline component flows, call `ValidateConfiguredFlow` on `FlowEventManagerComponent`. It validates either `InlineNodes` or the assigned `FlowAsset`, depending on the component configuration.
 
 ## Development
 
@@ -61,3 +83,5 @@ Before publishing a release, validate the plugin against each supported engine v
 ```
 
 Use paths that match your local Unreal Engine installation and project layout.
+
+Release notes are maintained in `CHANGELOG.md`.

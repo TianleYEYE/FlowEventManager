@@ -1,23 +1,31 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "1.0.0",
+	"Version": 2,
+	"VersionName": "1.1.0",
 	"FriendlyName": "Flow Event Manager",
-	"Description": "Manage timed serial and parallel Blueprint event flows in a level.",
+	"Description": "Author, validate, and run timed Blueprint event flows with a visual node editor.",
 	"Category": "Blueprints",
-	"CreatedBy": "Codex",
+	"CreatedBy": "TianleYEYE",
+	"DocsURL": "https://github.com/TianleYEYE/FlowEventManager",
+	"SupportURL": "https://github.com/TianleYEYE/FlowEventManager/issues",
 	"CanContainContent": false,
 	"Installed": false,
 	"Modules": [
 		{
 			"Name": "FlowEventManager",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			]
 		},
 		{
 			"Name": "FlowEventManagerEditor",
 			"Type": "Editor",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			]
 		}
 	]
 }

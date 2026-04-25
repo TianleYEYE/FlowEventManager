@@ -10,7 +10,12 @@
 #include "IDetailsView.h"
 #include "PropertyEditorModule.h"
 #include "ScopedTransaction.h"
+#include "Widgets/Input/SButton.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Text/STextBlock.h"
 
 #define LOCTEXT_NAMESPACE "FlowEventSequenceAssetEditor"
 
@@ -21,6 +26,7 @@ void FFlowEventSequenceAssetEditor::InitFlowEventSequenceAssetEditor(const ETool
 {
 	FlowAsset = InFlowAsset;
 	CreateEditorGraph();
+	RefreshValidationResults();
 
 	GraphEditorCommands = MakeShared<FUICommandList>();
 	GraphEditorCommands->MapAction(
@@ -144,7 +150,75 @@ TSharedRef<SDockTab> FFlowEventSequenceAssetEditor::SpawnDetailsTab(const FSpawn
 	return SNew(SDockTab)
 		.Label(LOCTEXT("DetailsTabLabel", "Details"))
 		[
-			DetailsView.ToSharedRef()
+			SNew(SVerticalBox)
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(4.0f)
+			[
+				SNew(SHorizontalBox)
+
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("ValidateFlowButton", "Validate Flow"))
+					.ToolTipText(LOCTEXT("ValidateFlowButtonTooltip", "Checks this flow for missing targets, invalid links, duplicate ids, and unreachable nodes."))
+					.OnClicked(this, &FFlowEventSequenceAssetEditor::OnValidateFlowClicked)
+				]
+
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.Padding(6.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("AutoArrangeButton", "Auto Arrange"))
+					.ToolTipText(LOCTEXT("AutoArrangeButtonTooltip", "Arranges nodes from left to right using the current flow order."))
+					.OnClicked(this, &FFlowEventSequenceAssetEditor::OnAutoArrangeClicked)
+				]
+
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.Padding(6.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("FixNodeIdsButton", "Fix Node IDs"))
+					.ToolTipText(LOCTEXT("FixNodeIdsButtonTooltip", "Assigns unique ids to nodes with empty or duplicate NodeId values."))
+					.OnClicked(this, &FFlowEventSequenceAssetEditor::OnFixNodeIdsClicked)
+				]
+
+				+ SHorizontalBox::Slot()
+				.FillWidth(1.0f)
+				.VAlign(VAlign_Center)
+				.Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text(this, &FFlowEventSequenceAssetEditor::GetValidationSummaryText)
+				]
+			]
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(4.0f, 0.0f, 4.0f, 4.0f)
+			[
+				SNew(SBox)
+				.MaxDesiredHeight(120.0f)
+				[
+					SNew(SScrollBox)
+					+ SScrollBox::Slot()
+					[
+						SNew(STextBlock)
+						.AutoWrapText(true)
+						.Text(this, &FFlowEventSequenceAssetEditor::GetValidationDetailsText)
+					]
+				]
+			]
+
+			+ SVerticalBox::Slot()
+			.FillHeight(1.0f)
+			[
+				DetailsView.ToSharedRef()
+			]
 		];
 }
 
@@ -254,6 +328,7 @@ void FFlowEventSequenceAssetEditor::ExportGraphToAsset()
 	}
 
 	FlowAsset->MarkPackageDirty();
+	RefreshValidationResults();
 }
 
 void FFlowEventSequenceAssetEditor::OnGraphChanged(const FEdGraphEditAction& Action)
@@ -273,6 +348,7 @@ void FFlowEventSequenceAssetEditor::OnFinishedChangingProperties(const FProperty
 	}
 
 	ExportGraphToAsset();
+	RefreshValidationResults();
 }
 
 void FFlowEventSequenceAssetEditor::OnSelectedNodesChanged(const TSet<UObject*>& NewSelection)
@@ -313,6 +389,112 @@ void FFlowEventSequenceAssetEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
 	FlowGraphNode->FlowNode.bUseTimelineCurve = true;
 	DetailsView->SetObject(FlowGraphNode);
 	ExportGraphToAsset();
+}
+
+FReply FFlowEventSequenceAssetEditor::OnValidateFlowClicked()
+{
+	ExportGraphToAsset();
+	RefreshValidationResults();
+	return FReply::Handled();
+}
+
+FReply FFlowEventSequenceAssetEditor::OnAutoArrangeClicked()
+{
+	const FScopedTransaction Transaction(LOCTEXT("AutoArrangeFlowEventNodes", "Auto Arrange Flow Event Nodes"));
+	AutoArrangeNodes();
+	ExportGraphToAsset();
+	if (GraphEditor.IsValid())
+	{
+		GraphEditor->NotifyGraphChanged();
+	}
+	return FReply::Handled();
+}
+
+FReply FFlowEventSequenceAssetEditor::OnFixNodeIdsClicked()
+{
+	const FScopedTransaction Transaction(LOCTEXT("FixFlowEventNodeIds", "Fix Flow Event Node IDs"));
+	FixNodeIds();
+	ExportGraphToAsset();
+	if (DetailsView.IsValid())
+	{
+		DetailsView->ForceRefresh();
+	}
+	if (GraphEditor.IsValid())
+	{
+		GraphEditor->NotifyGraphChanged();
+	}
+	return FReply::Handled();
+}
+
+void FFlowEventSequenceAssetEditor::RefreshValidationResults()
+{
+	if (!FlowAsset)
+	{
+		ValidationSummaryText = LOCTEXT("ValidationNoAsset", "No flow asset loaded.");
+		ValidationDetailsText = FText::GetEmpty();
+		return;
+	}
+
+	TArray<FFlowEventValidationIssue> Issues;
+	FlowAsset->ValidateFlow(Issues);
+
+	int32 ErrorCount = 0;
+	int32 WarningCount = 0;
+	int32 InfoCount = 0;
+	FString Details;
+
+	for (const FFlowEventValidationIssue& Issue : Issues)
+	{
+		FString SeverityText;
+		switch (Issue.Severity)
+		{
+		case EFlowEventValidationSeverity::Error:
+			SeverityText = TEXT("Error");
+			++ErrorCount;
+			break;
+
+		case EFlowEventValidationSeverity::Warning:
+			SeverityText = TEXT("Warning");
+			++WarningCount;
+			break;
+
+		default:
+			SeverityText = TEXT("Info");
+			++InfoCount;
+			break;
+		}
+
+		Details += FString::Printf(
+			TEXT("[%s] Node %d (%s): %s\n"),
+			*SeverityText,
+			Issue.NodeIndex,
+			*Issue.NodeId.ToString(),
+			*Issue.Message.ToString());
+	}
+
+	if (Issues.Num() == 0)
+	{
+		ValidationSummaryText = LOCTEXT("ValidationClean", "No validation issues.");
+		ValidationDetailsText = LOCTEXT("ValidationCleanDetails", "This flow is ready to run.");
+		return;
+	}
+
+	ValidationSummaryText = FText::Format(
+		LOCTEXT("ValidationSummary", "{0} errors, {1} warnings, {2} info"),
+		FText::AsNumber(ErrorCount),
+		FText::AsNumber(WarningCount),
+		FText::AsNumber(InfoCount));
+	ValidationDetailsText = FText::FromString(Details);
+}
+
+FText FFlowEventSequenceAssetEditor::GetValidationSummaryText() const
+{
+	return ValidationSummaryText;
+}
+
+FText FFlowEventSequenceAssetEditor::GetValidationDetailsText() const
+{
+	return ValidationDetailsText;
 }
 
 void FFlowEventSequenceAssetEditor::DeleteSelectedNodes()
@@ -393,6 +575,62 @@ UFlowEventEdGraphNode* FFlowEventSequenceAssetEditor::CreateGraphNodeFromFlowNod
 	NewNode->AllocateDefaultPins();
 	EditorGraph->AddNode(NewNode, false, false);
 	return NewNode;
+}
+
+void FFlowEventSequenceAssetEditor::AutoArrangeNodes()
+{
+	if (!EditorGraph)
+	{
+		return;
+	}
+
+	EditorGraph->Modify();
+	const TArray<UFlowEventEdGraphNode*> OrderedNodes = GetOrderedGraphNodes();
+	for (int32 Index = 0; Index < OrderedNodes.Num(); ++Index)
+	{
+		UFlowEventEdGraphNode* Node = OrderedNodes[Index];
+		if (!Node)
+		{
+			continue;
+		}
+
+		Node->Modify();
+		Node->NodePosX = Index * 300;
+		Node->NodePosY = (Index % 2) * 80;
+	}
+
+	EditorGraph->NotifyGraphChanged();
+}
+
+void FFlowEventSequenceAssetEditor::FixNodeIds()
+{
+	const TArray<UFlowEventEdGraphNode*> OrderedNodes = GetOrderedGraphNodes();
+	TSet<FName> UsedNodeIds;
+
+	for (int32 Index = 0; Index < OrderedNodes.Num(); ++Index)
+	{
+		UFlowEventEdGraphNode* Node = OrderedNodes[Index];
+		if (!Node)
+		{
+			continue;
+		}
+
+		FName DesiredNodeId = Node->FlowNode.NodeId;
+		if (DesiredNodeId.IsNone() || UsedNodeIds.Contains(DesiredNodeId))
+		{
+			int32 CandidateNumber = Index + 1;
+			do
+			{
+				DesiredNodeId = *FString::Printf(TEXT("Node_%03d"), CandidateNumber++);
+			}
+			while (UsedNodeIds.Contains(DesiredNodeId));
+
+			Node->Modify();
+			Node->FlowNode.NodeId = DesiredNodeId;
+		}
+
+		UsedNodeIds.Add(DesiredNodeId);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

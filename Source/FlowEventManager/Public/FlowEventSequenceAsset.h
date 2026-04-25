@@ -23,6 +23,32 @@ enum class EFlowEventNextMode : uint8
 	Parallel UMETA(DisplayName = "Parallel")
 };
 
+UENUM(BlueprintType)
+enum class EFlowEventValidationSeverity : uint8
+{
+	Info UMETA(DisplayName = "Info"),
+	Warning UMETA(DisplayName = "Warning"),
+	Error UMETA(DisplayName = "Error")
+};
+
+USTRUCT(BlueprintType)
+struct FLOWEVENTMANAGER_API FFlowEventValidationIssue
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Flow Validation")
+	EFlowEventValidationSeverity Severity = EFlowEventValidationSeverity::Info;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Flow Validation")
+	int32 NodeIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Flow Validation")
+	FName NodeId = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Flow Validation")
+	FText Message;
+};
+
 USTRUCT(BlueprintType)
 struct FLOWEVENTMANAGER_API FFlowEventNode
 {
@@ -81,4 +107,13 @@ class FLOWEVENTMANAGER_API UFlowEventSequenceAsset : public UDataAsset
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flow")
 	TArray<FFlowEventNode> Nodes;
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Validation")
+	void ValidateFlow(TArray<FFlowEventValidationIssue>& OutIssues) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Validation")
+	static void ValidateNodes(const TArray<FFlowEventNode>& InNodes, TArray<FFlowEventValidationIssue>& OutIssues);
+
+	UFUNCTION(BlueprintCallable, Category = "Flow Validation")
+	bool HasValidationErrors() const;
 };
