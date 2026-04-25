@@ -2,10 +2,27 @@
 
 #include "AssetActions/FlowEventSequenceAssetActions.h"
 #include "AssetToolsModule.h"
+#include "EdGraphUtilities.h"
+#include "Graph/FlowEventEdGraphNode.h"
+#include "Graph/SFlowEventEdGraphNode.h"
 #include "GraphEditorActions.h"
 #include "IAssetTools.h"
 
 #define LOCTEXT_NAMESPACE "FlowEventManagerEditor"
+
+class FFlowEventGraphNodeFactory : public FGraphPanelNodeFactory
+{
+public:
+	virtual TSharedPtr<SGraphNode> CreateNode(UEdGraphNode* Node) const override
+	{
+		if (UFlowEventEdGraphNode* FlowNode = Cast<UFlowEventEdGraphNode>(Node))
+		{
+			return SNew(SFlowEventEdGraphNode, FlowNode);
+		}
+
+		return nullptr;
+	}
+};
 
 class FFlowEventManagerEditorModule : public IFlowEventManagerEditorModule
 {
@@ -13,6 +30,8 @@ public:
 	virtual void StartupModule() override
 	{
 		FGraphEditorCommands::Register();
+		GraphNodeFactory = MakeShared<FFlowEventGraphNodeFactory>();
+		FEdGraphUtilities::RegisterVisualNodeFactory(GraphNodeFactory);
 
 		IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 		FlowEventAssetCategory = AssetTools.RegisterAdvancedAssetCategory(TEXT("FlowEventManager"), LOCTEXT("FlowEventManagerCategory", "Flow Event Manager"));
@@ -21,6 +40,12 @@ public:
 
 	virtual void ShutdownModule() override
 	{
+		if (GraphNodeFactory.IsValid())
+		{
+			FEdGraphUtilities::UnregisterVisualNodeFactory(GraphNodeFactory);
+			GraphNodeFactory.Reset();
+		}
+
 		if (FModuleManager::Get().IsModuleLoaded("AssetTools"))
 		{
 			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
@@ -45,6 +70,7 @@ private:
 
 	EAssetTypeCategories::Type FlowEventAssetCategory = EAssetTypeCategories::Misc;
 	TArray<TSharedPtr<IAssetTypeActions>> RegisteredAssetTypeActions;
+	TSharedPtr<FGraphPanelNodeFactory> GraphNodeFactory;
 };
 
 DEFINE_LOG_CATEGORY(LogFlowEventManagerEditor);

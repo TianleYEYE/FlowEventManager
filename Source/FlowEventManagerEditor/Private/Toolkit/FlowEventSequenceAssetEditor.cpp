@@ -113,6 +113,7 @@ TSharedRef<SDockTab> FFlowEventSequenceAssetEditor::SpawnGraphTab(const FSpawnTa
 
 	SGraphEditor::FGraphEditorEvents Events;
 	Events.OnSelectionChanged = SGraphEditor::FOnSelectionChanged::CreateSP(this, &FFlowEventSequenceAssetEditor::OnSelectedNodesChanged);
+	Events.OnNodeDoubleClicked = FSingleNodeEvent::CreateSP(this, &FFlowEventSequenceAssetEditor::OnNodeDoubleClicked);
 
 	SAssignNew(GraphEditor, SGraphEditor)
 		.AdditionalCommands(GraphEditorCommands)
@@ -258,6 +259,10 @@ void FFlowEventSequenceAssetEditor::ExportGraphToAsset()
 void FFlowEventSequenceAssetEditor::OnGraphChanged(const FEdGraphEditAction& Action)
 {
 	ExportGraphToAsset();
+	if (DetailsView.IsValid())
+	{
+		DetailsView->ForceRefresh();
+	}
 }
 
 void FFlowEventSequenceAssetEditor::OnFinishedChangingProperties(const FPropertyChangedEvent& PropertyChangedEvent)
@@ -294,6 +299,20 @@ void FFlowEventSequenceAssetEditor::OnSelectedNodesChanged(const TSet<UObject*>&
 	{
 		DetailsView->SetObject(FlowAsset);
 	}
+}
+
+void FFlowEventSequenceAssetEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
+{
+	UFlowEventEdGraphNode* FlowGraphNode = Cast<UFlowEventEdGraphNode>(Node);
+	if (!FlowGraphNode || !DetailsView.IsValid())
+	{
+		return;
+	}
+
+	FlowGraphNode->Modify();
+	FlowGraphNode->FlowNode.bUseTimelineCurve = true;
+	DetailsView->SetObject(FlowGraphNode);
+	ExportGraphToAsset();
 }
 
 void FFlowEventSequenceAssetEditor::DeleteSelectedNodes()

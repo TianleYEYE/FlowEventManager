@@ -39,6 +39,7 @@ private:
 	void OnGraphChanged(const FEdGraphEditAction& Action);
 	void OnFinishedChangingProperties(const FPropertyChangedEvent& PropertyChangedEvent);
 	void OnSelectedNodesChanged(const TSet<UObject*>& NewSelection);
+	void OnNodeDoubleClicked(UEdGraphNode* Node);
 	void DeleteSelectedNodes();
 	bool CanDeleteSelectedNodes() const;
 

@@ -9,7 +9,8 @@
 
 UFlowEventManagerComponent::UFlowEventManagerComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
 
 void UFlowEventManagerComponent::BeginPlay()
@@ -26,6 +27,46 @@ void UFlowEventManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 {
 	StopFlow(false);
 	Super::EndPlay(EndPlayReason);
+}
+
+void UFlowEventManagerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bFlowRunning)
+	{
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	const TArray<FFlowEventNode>* Nodes = GetConfiguredNodes();
+	if (!Nodes)
+	{
+		return;
+	}
+
+	for (TPair<int32, FFlowEventRuntimeNode>& ActiveNodePair : ActiveNodes)
+	{
+		if (!Nodes->IsValidIndex(ActiveNodePair.Key))
+		{
+			continue;
+		}
+
+		const FFlowEventNode& Node = (*Nodes)[ActiveNodePair.Key];
+		if (!Node.bUseTimelineCurve)
+		{
+			continue;
+		}
+
+		FFlowEventRuntimeNode& RuntimeNode = ActiveNodePair.Value;
+		RuntimeNode.ElapsedTime = FMath::Min(RuntimeNode.ElapsedTime + DeltaTime, FMath::Max(0.0f, Node.EventDuration));
+		const float OutputValue = EvaluateTimelineValue(Node, RuntimeNode.ElapsedTime);
+
+		for (TObjectPtr<AActor>& Target : RuntimeNode.Targets)
+		{
+			ExecuteEventOnTarget(Target.Get(), Node, OutputValue);
+		}
+	}
 }
 
 void UFlowEventManagerComponent::StartFlow()
@@ -47,6 +88,7 @@ void UFlowEventManagerComponent::StartFlowAtIndex(int32 NodeIndex)
 	bFlowRunning = true;
 	++ActiveRunId;
 	PendingStartCount = 0;
+	SetComponentTickEnabled(true);
 	OnFlowStarted.Broadcast();
 	StartNodeInternal(NodeIndex);
 	CheckFlowFinished();
@@ -76,6 +118,7 @@ void UFlowEventManagerComponent::StopFlow(bool bBroadcastFinished)
 	const bool bWasRunning = bFlowRunning;
 	bFlowRunning = false;
 	++ActiveRunId;
+	SetComponentTickEnabled(false);
 
 	if (bWasRunning && bBroadcastFinished)
 	{
@@ -149,7 +192,14 @@ void UFlowEventManagerComponent::StartNodeInternal(int32 NodeIndex)
 	for (AActor* Target : Targets)
 	{
 		OnNodeStarted.Broadcast(Node.NodeId, NodeIndex, Target, Node.EventDuration);
-		ExecuteEventOnTarget(Target, Node);
+		ExecuteEventOnTarget(Target, Node, Node.bUseTimelineCurve ? EvaluateTimelineValue(Node, 0.0f) : Node.EventDuration);
+		RuntimeNode.Targets.Add(Target);
+	}
+
+	if (FFlowEventRuntimeNode* RuntimeNodePtr = ActiveNodes.Find(NodeIndex))
+	{
+		RuntimeNodePtr->Targets = RuntimeNode.Targets;
+		RuntimeNodePtr->ElapsedTime = 0.0f;
 	}
 
 	ScheduleNextNode(Node, NodeIndex);
@@ -285,6 +335,7 @@ void UFlowEventManagerComponent::CheckFlowFinished()
 	if (bFlowRunning && ActiveNodes.Num() == 0 && PendingStartCount == 0)
 	{
 		bFlowRunning = false;
+		SetComponentTickEnabled(false);
 		OnFlowFinished.Broadcast();
 	}
 }
@@ -344,7 +395,7 @@ void UFlowEventManagerComponent::ResolveTargets(const FFlowEventNode& Node, TArr
 	}
 }
 
-bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node) const
+bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node, float OutputValue) const
 {
 	if (!Target || Node.EventName.IsNone())
 	{
@@ -375,15 +426,15 @@ bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlo
 			void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Params);
 			if (FFloatProperty* FloatProperty = CastField<FFloatProperty>(Property))
 			{
-				FloatProperty->SetPropertyValue(ValuePtr, Node.EventDuration);
+				FloatProperty->SetPropertyValue(ValuePtr, OutputValue);
 			}
 			else if (FDoubleProperty* DoubleProperty = CastField<FDoubleProperty>(Property))
 			{
-				DoubleProperty->SetPropertyValue(ValuePtr, static_cast<double>(Node.EventDuration));
+				DoubleProperty->SetPropertyValue(ValuePtr, static_cast<double>(OutputValue));
 			}
 			else
 			{
-				UE_LOG(LogFlowEventManager, Warning, TEXT("Event/function '%s' on '%s' has an unsupported parameter '%s'. Use no parameter or one float/double duration parameter."), *Node.EventName.ToString(), *Target->GetName(), *Property->GetName());
+				UE_LOG(LogFlowEventManager, Warning, TEXT("Event/function '%s' on '%s' has an unsupported parameter '%s'. Use no parameter or one float/double output value parameter."), *Node.EventName.ToString(), *Target->GetName(), *Property->GetName());
 				return false;
 			}
 		}
@@ -391,4 +442,15 @@ bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlo
 
 	Target->ProcessEvent(Function, Params);
 	return true;
+}
+
+float UFlowEventManagerComponent::EvaluateTimelineValue(const FFlowEventNode& Node, float ElapsedTime) const
+{
+	const FRichCurve* RichCurve = Node.TimelineCurve.GetRichCurveConst();
+	if (!RichCurve || RichCurve->IsEmpty())
+	{
+		return ElapsedTime;
+	}
+
+	return RichCurve->Eval(ElapsedTime);
 }

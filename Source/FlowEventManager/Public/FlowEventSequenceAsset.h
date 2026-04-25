@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Curves/CurveFloat.h"
 #include "Engine/DataAsset.h"
 #include "GameFramework/Actor.h"
 #include "FlowEventSequenceAsset.generated.h"
@@ -47,6 +48,12 @@ struct FLOWEVENTMANAGER_API FFlowEventNode
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float EventDuration = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow|Timeline")
+	bool bUseTimelineCurve = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow|Timeline", meta = (EditCondition = "bUseTimelineCurve", EditConditionHides))
+	FRuntimeFloatCurve TimelineCurve;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow")
 	EFlowEventNextMode NextMode = EFlowEventNextMode::Serial;

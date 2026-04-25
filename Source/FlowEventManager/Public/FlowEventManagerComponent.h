@@ -19,6 +19,10 @@ struct FFlowEventRuntimeNode
 	UPROPERTY()
 	FName NodeId = NAME_None;
 
+	UPROPERTY()
+	TArray<TObjectPtr<AActor>> Targets;
+
+	float ElapsedTime = 0.0f;
 	FTimerHandle FinishTimerHandle;
 };
 
@@ -32,6 +36,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Flow Event Manager")
 	void StartFlow();
@@ -85,7 +90,8 @@ private:
 
 	int32 ResolveNextNodeIndex(const FFlowEventNode& Node, int32 CurrentNodeIndex) const;
 	void ResolveTargets(const FFlowEventNode& Node, TArray<AActor*>& OutTargets) const;
-	bool ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node) const;
+	bool ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node, float OutputValue) const;
+	float EvaluateTimelineValue(const FFlowEventNode& Node, float ElapsedTime) const;
 
 	UPROPERTY()
 	TMap<int32, FFlowEventRuntimeNode> ActiveNodes;
