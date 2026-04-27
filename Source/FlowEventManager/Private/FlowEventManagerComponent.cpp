@@ -64,7 +64,7 @@ void UFlowEventManagerComponent::TickComponent(float DeltaTime, ELevelTick TickT
 
 		for (TObjectPtr<AActor>& Target : RuntimeNode.Targets)
 		{
-			ExecuteEventOnTarget(Target.Get(), Node, OutputValue);
+			ExecuteEventOnTarget(Target.Get(), Node, OutputValue, RuntimeNode.ElapsedTime);
 		}
 	}
 }
@@ -270,7 +270,7 @@ void UFlowEventManagerComponent::StartNodeInternal(int32 NodeIndex)
 	for (AActor* Target : Targets)
 	{
 		OnNodeStarted.Broadcast(Node.NodeId, NodeIndex, Target, Node.EventDuration);
-		ExecuteEventOnTarget(Target, Node, Node.bUseTimelineCurve ? EvaluateTimelineValue(Node, 0.0f) : Node.EventDuration);
+		ExecuteEventOnTarget(Target, Node, Node.bUseTimelineCurve ? EvaluateTimelineValue(Node, 0.0f) : Node.EventDuration, 0.0f);
 		RuntimeNode.Targets.Add(Target);
 	}
 
@@ -473,7 +473,7 @@ void UFlowEventManagerComponent::ResolveTargets(const FFlowEventNode& Node, TArr
 	}
 }
 
-bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node, float OutputValue) const
+bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node, float OutputValue, float ElapsedTime) const
 {
 	if (!Target || Node.EventName.IsNone())
 	{
@@ -493,6 +493,7 @@ bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlo
 		Params = static_cast<uint8*>(FMemory_Alloca(Function->ParmsSize));
 		FMemory::Memzero(Params, Function->ParmsSize);
 
+		int32 NumericParamIndex = 0;
 		for (TFieldIterator<FProperty> It(Function); It; ++It)
 		{
 			FProperty* Property = *It;
@@ -502,19 +503,28 @@ bool UFlowEventManagerComponent::ExecuteEventOnTarget(AActor* Target, const FFlo
 			}
 
 			void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Params);
+			if (NumericParamIndex >= 2)
+			{
+				UE_LOG(LogFlowEventManager, Warning, TEXT("Event/function '%s' on '%s' has too many parameters. Use no parameters, one float/double output value parameter, or two float/double parameters for output value and elapsed time."), *Node.EventName.ToString(), *Target->GetName());
+				return false;
+			}
+
+			const float NumericValue = NumericParamIndex == 0 ? OutputValue : ElapsedTime;
 			if (FFloatProperty* FloatProperty = CastField<FFloatProperty>(Property))
 			{
-				FloatProperty->SetPropertyValue(ValuePtr, OutputValue);
+				FloatProperty->SetPropertyValue(ValuePtr, NumericValue);
 			}
 			else if (FDoubleProperty* DoubleProperty = CastField<FDoubleProperty>(Property))
 			{
-				DoubleProperty->SetPropertyValue(ValuePtr, static_cast<double>(OutputValue));
+				DoubleProperty->SetPropertyValue(ValuePtr, static_cast<double>(NumericValue));
 			}
 			else
 			{
-				UE_LOG(LogFlowEventManager, Warning, TEXT("Event/function '%s' on '%s' has an unsupported parameter '%s'. Use no parameter or one float/double output value parameter."), *Node.EventName.ToString(), *Target->GetName(), *Property->GetName());
+				UE_LOG(LogFlowEventManager, Warning, TEXT("Event/function '%s' on '%s' has an unsupported parameter '%s'. Use no parameters, one float/double output value parameter, or two float/double parameters for output value and elapsed time."), *Node.EventName.ToString(), *Target->GetName(), *Property->GetName());
 				return false;
 			}
+
+			++NumericParamIndex;
 		}
 	}
 

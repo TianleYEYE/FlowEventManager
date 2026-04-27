@@ -36,9 +36,10 @@ Supported signatures:
 ```cpp
 void EventName();
 void EventName(float Value);
+void EventName(float Value, float ElapsedTime);
 ```
 
-For normal timed nodes, `Value` is the node duration. For timeline nodes, `Value` is the evaluated curve value.
+For normal timed nodes, `Value` is the node duration. For timeline nodes, `Value` is the evaluated curve value. When present, `ElapsedTime` is the node's elapsed execution time in seconds.
 
 ## Validate Before Runtime
 

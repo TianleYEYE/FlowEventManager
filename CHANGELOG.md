@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added optional two-parameter event signatures so timeline nodes can output both the evaluated curve value and elapsed execution time.
+
 ## 1.1.0
 
 - Added structured flow validation for assets and inline component nodes.

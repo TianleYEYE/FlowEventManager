@@ -28,7 +28,7 @@ The `.uplugin` file intentionally does not pin `EngineVersion`, so the same chec
 1. Add `FlowEventManagerComponent` to an Actor in the level.
 2. Configure `InlineNodes`, or create a `Flow Event Sequence` asset from the Content Browser and assign it to `FlowAsset` with `bUseInlineNodes` disabled.
 3. Each target Blueprint should expose a Custom Event or BlueprintCallable function named by `EventName`.
-4. The event can accept no parameters, or one `float` duration parameter. The plugin passes `EventDuration` to that parameter.
+4. The event can accept no parameters, one numeric parameter, or two numeric parameters. With one parameter, the plugin passes the output value: `EventDuration` for normal nodes, or the evaluated timeline curve value for timeline nodes. With two parameters, the second value is the node's elapsed execution time in seconds.
 
 ## Visual Editor
 
