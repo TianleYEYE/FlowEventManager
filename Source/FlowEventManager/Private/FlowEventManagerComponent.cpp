@@ -53,7 +53,7 @@ void UFlowEventManagerComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		}
 
 		const FFlowEventNode& Node = (*Nodes)[ActiveNodePair.Key];
-		if (!Node.bUseTimelineCurve)
+		if (Node.NodeType == EFlowEventNodeType::Delay || !Node.bUseTimelineCurve)
 		{
 			continue;
 		}
@@ -258,29 +258,37 @@ void UFlowEventManagerComponent::StartNodeInternal(int32 NodeIndex)
 	RuntimeNode.NodeId = Node.NodeId;
 	ActiveNodes.Add(NodeIndex, RuntimeNode);
 
-	TArray<AActor*> Targets;
-	ResolveTargets(Node, Targets);
-
-	if (Targets.Num() == 0)
+	if (Node.NodeType == EFlowEventNodeType::Delay)
 	{
-		UE_LOG(LogFlowEventManager, Warning, TEXT("Node '%s' has no resolved target actors."), *Node.NodeId.ToString());
 		OnNodeStarted.Broadcast(Node.NodeId, NodeIndex, nullptr, Node.EventDuration);
+		ScheduleNextNode(Node, NodeIndex);
 	}
-
-	for (AActor* Target : Targets)
+	else
 	{
-		OnNodeStarted.Broadcast(Node.NodeId, NodeIndex, Target, Node.EventDuration);
-		ExecuteEventOnTarget(Target, Node, Node.bUseTimelineCurve ? EvaluateTimelineValue(Node, 0.0f) : Node.EventDuration, 0.0f);
-		RuntimeNode.Targets.Add(Target);
-	}
+		TArray<AActor*> Targets;
+		ResolveTargets(Node, Targets);
 
-	if (FFlowEventRuntimeNode* RuntimeNodePtr = ActiveNodes.Find(NodeIndex))
-	{
-		RuntimeNodePtr->Targets = RuntimeNode.Targets;
-		RuntimeNodePtr->ElapsedTime = 0.0f;
-	}
+		if (Targets.Num() == 0)
+		{
+			UE_LOG(LogFlowEventManager, Warning, TEXT("Node '%s' has no resolved target actors."), *Node.NodeId.ToString());
+			OnNodeStarted.Broadcast(Node.NodeId, NodeIndex, nullptr, Node.EventDuration);
+		}
 
-	ScheduleNextNode(Node, NodeIndex);
+		for (AActor* Target : Targets)
+		{
+			OnNodeStarted.Broadcast(Node.NodeId, NodeIndex, Target, Node.EventDuration);
+			ExecuteEventOnTarget(Target, Node, Node.bUseTimelineCurve ? EvaluateTimelineValue(Node, 0.0f) : Node.EventDuration, 0.0f);
+			RuntimeNode.Targets.Add(Target);
+		}
+
+		if (FFlowEventRuntimeNode* RuntimeNodePtr = ActiveNodes.Find(NodeIndex))
+		{
+			RuntimeNodePtr->Targets = RuntimeNode.Targets;
+			RuntimeNodePtr->ElapsedTime = 0.0f;
+		}
+
+		ScheduleNextNode(Node, NodeIndex);
+	}
 
 	if (Node.EventDuration <= 0.0f)
 	{
@@ -350,50 +358,73 @@ void UFlowEventManagerComponent::ScheduleNextNode(const FFlowEventNode& Node, in
 		return;
 	}
 
-	const int32 NextNodeIndex = ResolveNextNodeIndex(Node, CurrentNodeIndex);
 	const TArray<FFlowEventNode>* Nodes = GetConfiguredNodes();
-	if (!Nodes || !Nodes->IsValidIndex(NextNodeIndex))
+	if (!Nodes)
+	{
+		return;
+	}
+
+	const TArray<int32> NextNodeIndices = ResolveNextNodeIndices(Node, CurrentNodeIndex);
+	TArray<int32> ValidNextNodeIndices;
+	for (int32 NextNodeIndex : NextNodeIndices)
+	{
+		if (Nodes->IsValidIndex(NextNodeIndex))
+		{
+			ValidNextNodeIndices.Add(NextNodeIndex);
+		}
+	}
+
+	if (ValidNextNodeIndices.Num() == 0)
 	{
 		return;
 	}
 
 	const float Delay = FMath::Max(0.0f, Node.ParallelStartDelay);
-	++PendingStartCount;
+	PendingStartCount += ValidNextNodeIndices.Num();
 
 	if (Delay <= 0.0f)
 	{
-		PendingStartCount = FMath::Max(0, PendingStartCount - 1);
-		StartNodeInternal(NextNodeIndex);
+		for (int32 NextNodeIndex : ValidNextNodeIndices)
+		{
+			PendingStartCount = FMath::Max(0, PendingStartCount - 1);
+			StartNodeInternal(NextNodeIndex);
+		}
 		return;
 	}
 
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		PendingStartCount = FMath::Max(0, PendingStartCount - 1);
-		StartNodeInternal(NextNodeIndex);
+		for (int32 NextNodeIndex : ValidNextNodeIndices)
+		{
+			PendingStartCount = FMath::Max(0, PendingStartCount - 1);
+			StartNodeInternal(NextNodeIndex);
+		}
 		return;
 	}
 
-	PendingStartTimerHandles.Add(FTimerHandle());
-	FTimerHandle& TimerHandle = PendingStartTimerHandles.Last();
-	const int32 CapturedRunId = ActiveRunId;
+	for (int32 NextNodeIndex : ValidNextNodeIndices)
+	{
+		PendingStartTimerHandles.Add(FTimerHandle());
+		FTimerHandle& TimerHandle = PendingStartTimerHandles.Last();
+		const int32 CapturedRunId = ActiveRunId;
 
-	World->GetTimerManager().SetTimer(
-		TimerHandle,
-		FTimerDelegate::CreateWeakLambda(this, [this, CapturedRunId, NextNodeIndex]()
-		{
-			if (!bFlowRunning || ActiveRunId != CapturedRunId)
+		World->GetTimerManager().SetTimer(
+			TimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this, CapturedRunId, NextNodeIndex]()
 			{
-				return;
-			}
+				if (!bFlowRunning || ActiveRunId != CapturedRunId)
+				{
+					return;
+				}
 
-			PendingStartCount = FMath::Max(0, PendingStartCount - 1);
-			StartNodeInternal(NextNodeIndex);
-			CheckFlowFinished();
-		}),
-		Delay,
-		false);
+				PendingStartCount = FMath::Max(0, PendingStartCount - 1);
+				StartNodeInternal(NextNodeIndex);
+				CheckFlowFinished();
+			}),
+			Delay,
+			false);
+	}
 }
 
 void UFlowEventManagerComponent::StartNextNode(const FFlowEventNode& Node, int32 CurrentNodeIndex)
@@ -420,12 +451,36 @@ void UFlowEventManagerComponent::CheckFlowFinished()
 
 int32 UFlowEventManagerComponent::ResolveNextNodeIndex(const FFlowEventNode& Node, int32 CurrentNodeIndex) const
 {
-	if (Node.NextNodeIndex != INDEX_NONE)
+	const TArray<int32> NextNodeIndices = ResolveNextNodeIndices(Node, CurrentNodeIndex);
+	return NextNodeIndices.Num() > 0 ? NextNodeIndices[0] : INDEX_NONE;
+}
+
+TArray<int32> UFlowEventManagerComponent::ResolveNextNodeIndices(const FFlowEventNode& Node, int32 CurrentNodeIndex) const
+{
+	TArray<int32> NextNodeIndices;
+	if (Node.NextMode == EFlowEventNextMode::Parallel && Node.ParallelNextNodeIndices.Num() > 0)
 	{
-		return Node.NextNodeIndex;
+		for (int32 NextNodeIndex : Node.ParallelNextNodeIndices)
+		{
+			NextNodeIndices.AddUnique(NextNodeIndex);
+		}
+
+		return NextNodeIndices;
 	}
 
-	return CurrentNodeIndex + 1;
+	if (Node.NextNodeIndex != INDEX_NONE)
+	{
+		if (Node.NextNodeIndex == MAX_int32)
+		{
+			return NextNodeIndices;
+		}
+
+		NextNodeIndices.Add(Node.NextNodeIndex);
+		return NextNodeIndices;
+	}
+
+	NextNodeIndices.Add(CurrentNodeIndex + 1);
+	return NextNodeIndices;
 }
 
 void UFlowEventManagerComponent::ResolveTargets(const FFlowEventNode& Node, TArray<AActor*>& OutTargets) const

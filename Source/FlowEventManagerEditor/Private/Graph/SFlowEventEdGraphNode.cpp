@@ -84,7 +84,7 @@ void SFlowEventEdGraphNode::UpdateGraphNode()
 							.VAlign(VAlign_Center)
 							[
 								SNew(STextBlock)
-								.Text(LOCTEXT("DurationLabel", "Duration"))
+								.Text(this, &SFlowEventEdGraphNode::GetDurationLabelText)
 							]
 							+ SHorizontalBox::Slot()
 							.AutoWidth()
@@ -215,6 +215,14 @@ FText SFlowEventEdGraphNode::GetDurationText() const
 {
 	const UFlowEventEdGraphNode* FlowGraphNode = GetFlowGraphNode();
 	return FlowGraphNode ? FText::AsNumber(FlowGraphNode->FlowNode.EventDuration) : FText::GetEmpty();
+}
+
+FText SFlowEventEdGraphNode::GetDurationLabelText() const
+{
+	const UFlowEventEdGraphNode* FlowGraphNode = GetFlowGraphNode();
+	return FlowGraphNode && FlowGraphNode->FlowNode.NodeType == EFlowEventNodeType::Delay
+		? LOCTEXT("DelayDurationLabel", "Delay")
+		: LOCTEXT("DurationLabel", "Duration");
 }
 
 FText SFlowEventEdGraphNode::GetNextModeText() const

@@ -19,6 +19,13 @@ void UFlowEventEdGraphNode::AllocateDefaultPins()
 
 FText UFlowEventEdGraphNode::GetNodeTitle(ENodeTitleType::Type TitleType) const
 {
+	if (FlowNode.NodeType == EFlowEventNodeType::Delay)
+	{
+		return FlowNode.NodeId.IsNone()
+			? LOCTEXT("UnnamedFlowDelayNode", "Delay")
+			: FText::Format(LOCTEXT("NamedFlowDelayNode", "Delay: {0}"), FText::FromName(FlowNode.NodeId));
+	}
+
 	if (!FlowNode.NodeId.IsNone())
 	{
 		return FText::FromName(FlowNode.NodeId);
@@ -34,6 +41,13 @@ FText UFlowEventEdGraphNode::GetNodeTitle(ENodeTitleType::Type TitleType) const
 
 FText UFlowEventEdGraphNode::GetTooltipText() const
 {
+	if (FlowNode.NodeType == EFlowEventNodeType::Delay)
+	{
+		return FText::Format(
+			LOCTEXT("FlowDelayNodeTooltip", "Delay: {0}s"),
+			FText::AsNumber(FlowNode.EventDuration));
+	}
+
 	return FText::Format(
 		LOCTEXT("FlowEventNodeTooltip", "Event: {0}\nDuration: {1}s"),
 		FlowNode.EventName.IsNone() ? LOCTEXT("NoEvent", "None") : FText::FromName(FlowNode.EventName),
@@ -42,6 +56,11 @@ FText UFlowEventEdGraphNode::GetTooltipText() const
 
 FLinearColor UFlowEventEdGraphNode::GetNodeTitleColor() const
 {
+	if (FlowNode.NodeType == EFlowEventNodeType::Delay)
+	{
+		return FLinearColor(0.5f, 0.36f, 0.16f);
+	}
+
 	return FlowNode.NextMode == EFlowEventNextMode::Parallel
 		? FLinearColor(0.18f, 0.46f, 0.78f)
 		: FLinearColor(0.16f, 0.56f, 0.36f);
@@ -56,6 +75,7 @@ void UFlowEventEdGraphNode::PostEditChangeProperty(FPropertyChangedEvent& Proper
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
+	FlowNode.PostEditChangeProperty(PropertyChangedEvent);
 	EnsureValidNodeIdentity(SourceNodeIndex);
 
 	if (UEdGraph* OwningGraph = GetGraph())

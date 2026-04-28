@@ -4,7 +4,15 @@
 #include "Curves/CurveFloat.h"
 #include "Engine/DataAsset.h"
 #include "GameFramework/Actor.h"
+#include "UObject/UnrealType.h"
 #include "FlowEventSequenceAsset.generated.h"
+
+UENUM(BlueprintType)
+enum class EFlowEventNodeType : uint8
+{
+	Event UMETA(DisplayName = "Event"),
+	Delay UMETA(DisplayName = "Delay")
+};
 
 UENUM(BlueprintType)
 enum class EFlowEventTargetMode : uint8
@@ -58,27 +66,30 @@ struct FLOWEVENTMANAGER_API FFlowEventNode
 	FName NodeId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow")
+	EFlowEventNodeType NodeType = EFlowEventNodeType::Event;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event", EditConditionHides))
 	EFlowEventTargetMode TargetMode = EFlowEventTargetMode::ExplicitActor;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "TargetMode == EFlowEventTargetMode::ExplicitActor", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event && TargetMode == EFlowEventTargetMode::ExplicitActor", EditConditionHides))
 	TObjectPtr<AActor> TargetActor = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "TargetMode == EFlowEventTargetMode::FirstActorWithTag || TargetMode == EFlowEventTargetMode::AllActorsWithTag", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event && (TargetMode == EFlowEventTargetMode::FirstActorWithTag || TargetMode == EFlowEventTargetMode::AllActorsWithTag)", EditConditionHides))
 	FName TargetTag = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "TargetMode == EFlowEventTargetMode::FirstActorOfClass || TargetMode == EFlowEventTargetMode::AllActorsOfClass", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event && (TargetMode == EFlowEventTargetMode::FirstActorOfClass || TargetMode == EFlowEventTargetMode::AllActorsOfClass)", EditConditionHides))
 	TSubclassOf<AActor> TargetClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event", EditConditionHides))
 	FName EventName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float EventDuration = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow|Timeline")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow|Timeline", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event", EditConditionHides))
 	bool bUseTimelineCurve = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow|Timeline", meta = (EditCondition = "bUseTimelineCurve", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow|Timeline", meta = (EditCondition = "NodeType == EFlowEventNodeType::Event && bUseTimelineCurve", EditConditionHides))
 	FRuntimeFloatCurve TimelineCurve;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow")
@@ -87,8 +98,11 @@ struct FLOWEVENTMANAGER_API FFlowEventNode
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (ClampMin = "0.0", UIMin = "0.0", EditCondition = "NextMode == EFlowEventNextMode::Parallel", EditConditionHides))
 	float ParallelStartDelay = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flow", meta = (ClampMin = "-1"))
+	UPROPERTY(BlueprintReadOnly, Category = "Flow|Generated")
 	int32 NextNodeIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Flow|Generated")
+	TArray<int32> ParallelNextNodeIndices;
 
 #if WITH_EDITORONLY_DATA
 	UPROPERTY()
@@ -96,6 +110,10 @@ struct FLOWEVENTMANAGER_API FFlowEventNode
 
 	UPROPERTY()
 	FVector2D EditorPosition = FVector2D::ZeroVector;
+#endif
+
+#if WITH_EDITOR
+	void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent);
 #endif
 };
 

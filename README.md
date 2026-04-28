@@ -27,23 +27,26 @@ The `.uplugin` file intentionally does not pin `EngineVersion`, so the same chec
 
 1. Add `FlowEventManagerComponent` to an Actor in the level.
 2. Configure `InlineNodes`, or create a `Flow Event Sequence` asset from the Content Browser and assign it to `FlowAsset` with `bUseInlineNodes` disabled.
-3. Each target Blueprint should expose a Custom Event or BlueprintCallable function named by `EventName`.
+3. Each event node target Blueprint should expose a Custom Event or BlueprintCallable function named by `EventName`.
 4. The event can accept no parameters, one numeric parameter, or two numeric parameters. With one parameter, the plugin passes the output value: `EventDuration` for normal nodes, or the evaluated timeline curve value for timeline nodes. With two parameters, the second value is the node's elapsed execution time in seconds.
 
 ## Visual Editor
 
 - Double-click a `Flow Event Sequence` asset to open the visual node editor.
 - Right-click the graph and choose `Add Flow Event Node` to add steps.
-- Connect an output pin to an input pin to set the next node. The graph editor writes back to the asset's `Nodes` array.
+- Choose `Add Delay Node` to add a step that waits for its `EventDuration` without calling a target event.
+- Connect an output pin to one or more input pins to set the next node or parallel branches. `NextNodeIndex` and `ParallelNextNodeIndices` are generated internally from graph links.
 - Use `Validate Flow` in the details panel to find missing targets, duplicate node ids, invalid links, unreachable nodes, and cycles before runtime.
 - Use `Fix Node IDs` to assign unique ids to empty or duplicate nodes.
-- Use `Auto Arrange` to quickly lay out nodes from left to right.
-- Existing assets that leave `NextNodeIndex` as `-1` keep the original implicit sequential behavior.
+- Use `Auto Arrange` to lay out nodes from left to right, with parallel branches sharing the same column.
+- Existing assets that leave `NextNodeIndex` as `-1` keep the original implicit sequential behavior. New edits should use graph links instead of hand-editing indices.
 
 ## Node Timing
 
 - `Serial`: the next node starts after the current node's `EventDuration`.
 - `Parallel`: the next node starts after `ParallelStartDelay`, while the current node continues until `EventDuration`.
+- A `Parallel` node can connect to multiple next nodes; all linked branches start after the same `ParallelStartDelay`.
+- `Delay` nodes use `EventDuration` as wait time and skip target/event execution.
 
 Example: node 1 has `EventDuration = 5`, `NextMode = Parallel`, `ParallelStartDelay = 2`. Node 2 starts two seconds after node 1 starts, and node 1 still finishes at five seconds.
 

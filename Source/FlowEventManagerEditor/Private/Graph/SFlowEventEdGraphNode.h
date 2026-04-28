@@ -22,6 +22,7 @@ public:
 private:
 	UFlowEventEdGraphNode* GetFlowGraphNode() const;
 	FText GetNodeTitleText() const;
+	FText GetDurationLabelText() const;
 	FText GetDurationText() const;
 	FText GetNextModeText() const;
 	FText GetParallelDelayText() const;

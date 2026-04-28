@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "EdGraph/EdGraphSchema.h"
+#include "FlowEventSequenceAsset.h"
 #include "FlowEventGraphSchema.generated.h"
 
 USTRUCT()
@@ -19,7 +20,15 @@ struct FFlowEventGraphSchemaAction_NewNode : public FEdGraphSchemaAction
 	{
 	}
 
+	FFlowEventGraphSchemaAction_NewNode(const FText& InNodeCategory, const FText& InMenuDesc, const FText& InToolTip, const int32 InGrouping, EFlowEventNodeType InNodeType)
+		: FEdGraphSchemaAction(InNodeCategory, InMenuDesc, InToolTip, InGrouping)
+		, NodeType(InNodeType)
+	{
+	}
+
 	virtual UEdGraphNode* PerformAction(UEdGraph* ParentGraph, UEdGraphPin* FromPin, const FVector2D Location, bool bSelectNewNode = true) override;
+
+	EFlowEventNodeType NodeType = EFlowEventNodeType::Event;
 };
 
 UCLASS()

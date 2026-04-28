@@ -21,7 +21,10 @@ UEdGraphNode* FFlowEventGraphSchemaAction_NewNode::PerformAction(UEdGraph* Paren
 	NewNode->CreateNewGuid();
 	NewNode->NodePosX = Location.X;
 	NewNode->NodePosY = Location.Y;
-	NewNode->FlowNode.NodeId = *FString::Printf(TEXT("Node_%d"), ParentGraph->Nodes.Num() + 1);
+	NewNode->FlowNode.NodeType = NodeType;
+	NewNode->FlowNode.NodeId = NodeType == EFlowEventNodeType::Delay
+		? *FString::Printf(TEXT("Delay_%d"), ParentGraph->Nodes.Num() + 1)
+		: *FString::Printf(TEXT("Node_%d"), ParentGraph->Nodes.Num() + 1);
 #if WITH_EDITORONLY_DATA
 	NewNode->FlowNode.EditorNodeGuid = FGuid::NewGuid();
 	NewNode->FlowNode.EditorPosition = Location;
@@ -48,9 +51,19 @@ void UFlowEventGraphSchema::GetGraphContextActions(FGraphContextMenuBuilder& Con
 		LOCTEXT("FlowEventCategory", "Flow Event"),
 		LOCTEXT("AddFlowEventNode", "Add Flow Event Node"),
 		LOCTEXT("AddFlowEventNodeTooltip", "Adds a flow event step to the sequence."),
-		0);
+		0,
+		EFlowEventNodeType::Event);
 
 	ContextMenuBuilder.AddAction(NewNodeAction);
+
+	const TSharedPtr<FFlowEventGraphSchemaAction_NewNode> NewDelayNodeAction = MakeShared<FFlowEventGraphSchemaAction_NewNode>(
+		LOCTEXT("FlowEventCategory", "Flow Event"),
+		LOCTEXT("AddFlowDelayNode", "Add Delay Node"),
+		LOCTEXT("AddFlowDelayNodeTooltip", "Adds a delay step that waits for its duration without calling a target event."),
+		1,
+		EFlowEventNodeType::Delay);
+
+	ContextMenuBuilder.AddAction(NewDelayNodeAction);
 }
 
 const FPinConnectionResponse UFlowEventGraphSchema::CanCreateConnection(const UEdGraphPin* A, const UEdGraphPin* B) const
@@ -68,12 +81,6 @@ const FPinConnectionResponse UFlowEventGraphSchema::CanCreateConnection(const UE
 	if (A->Direction == B->Direction)
 	{
 		return FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, LOCTEXT("SameDirection", "Connect an output pin to an input pin."));
-	}
-
-	const UEdGraphPin* OutputPin = A->Direction == EGPD_Output ? A : B;
-	if (OutputPin->LinkedTo.Num() > 0)
-	{
-		return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_A, LOCTEXT("ReplaceConnection", "Replace the existing outgoing connection."));
 	}
 
 	return FPinConnectionResponse(CONNECT_RESPONSE_MAKE, LOCTEXT("MakeConnection", "Connect flow."));
@@ -94,11 +101,15 @@ bool UFlowEventGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPin* B) 
 		return false;
 	}
 
+	if (OutputPin->LinkedTo.Contains(InputPin))
+	{
+		return true;
+	}
+
 	const FScopedTransaction Transaction(LOCTEXT("ConnectFlowEventNodes", "Connect Flow Event Nodes"));
 	OutputPin->Modify();
 	InputPin->Modify();
 
-	OutputPin->BreakAllPinLinks();
 	InputPin->BreakAllPinLinks();
 	OutputPin->MakeLinkTo(InputPin);
 

@@ -1,6 +1,7 @@
 #include "Toolkit/FlowEventSequenceAssetEditor.h"
 
 #include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
 #include "EdGraphUtilities.h"
 #include "Graph/FlowEventEdGraphNode.h"
 #include "Graph/FlowEventGraphSchema.h"
@@ -173,7 +174,7 @@ TSharedRef<SDockTab> FFlowEventSequenceAssetEditor::SpawnDetailsTab(const FSpawn
 				[
 					SNew(SButton)
 					.Text(LOCTEXT("AutoArrangeButton", "Auto Arrange"))
-					.ToolTipText(LOCTEXT("AutoArrangeButtonTooltip", "Arranges nodes from left to right using the current flow order."))
+					.ToolTipText(LOCTEXT("AutoArrangeButtonTooltip", "Arranges nodes from left to right and aligns parallel branches in the same column."))
 					.OnClicked(this, &FFlowEventSequenceAssetEditor::OnAutoArrangeClicked)
 				]
 
@@ -254,19 +255,30 @@ void FFlowEventSequenceAssetEditor::RebuildGraphFromAsset()
 	for (int32 Index = 0; Index < FlowAsset->Nodes.Num(); ++Index)
 	{
 		const FFlowEventNode& FlowNode = FlowAsset->Nodes[Index];
-		int32 NextIndex = FlowNode.NextNodeIndex;
-		if (NextIndex == INDEX_NONE)
+		TArray<int32> NextIndices;
+		if (FlowNode.NextMode == EFlowEventNextMode::Parallel && FlowNode.ParallelNextNodeIndices.Num() > 0)
 		{
-			NextIndex = Index + 1;
+			NextIndices = FlowNode.ParallelNextNodeIndices;
+		}
+		else if (FlowNode.NextNodeIndex == INDEX_NONE)
+		{
+			NextIndices.Add(Index + 1);
+		}
+		else
+		{
+			NextIndices.Add(FlowNode.NextNodeIndex);
 		}
 
-		if (GraphNodes.IsValidIndex(Index) && GraphNodes.IsValidIndex(NextIndex))
+		for (int32 NextIndex : NextIndices)
 		{
-			UEdGraphPin* OutputPin = GraphNodes[Index]->GetOutputPin();
-			UEdGraphPin* InputPin = GraphNodes[NextIndex]->GetInputPin();
-			if (OutputPin && InputPin)
+			if (GraphNodes.IsValidIndex(Index) && GraphNodes.IsValidIndex(NextIndex))
 			{
-				OutputPin->MakeLinkTo(InputPin);
+				UEdGraphPin* OutputPin = GraphNodes[Index]->GetOutputPin();
+				UEdGraphPin* InputPin = GraphNodes[NextIndex]->GetInputPin();
+				if (OutputPin && InputPin && !OutputPin->LinkedTo.Contains(InputPin))
+				{
+					OutputPin->MakeLinkTo(InputPin);
+				}
 			}
 		}
 	}
@@ -303,18 +315,33 @@ void FFlowEventSequenceAssetEditor::ExportGraphToAsset()
 		FlowNode.EditorPosition = FVector2D(GraphNode->NodePosX, GraphNode->NodePosY);
 #endif
 		FlowNode.NextNodeIndex = StopNextNodeIndex;
+		FlowNode.ParallelNextNodeIndices.Reset();
 
 		if (UEdGraphPin* OutputPin = GraphNode->GetOutputPin())
 		{
+			TArray<int32> LinkedIndices;
 			for (UEdGraphPin* LinkedPin : OutputPin->LinkedTo)
 			{
 				if (UFlowEventEdGraphNode* LinkedNode = LinkedPin ? Cast<UFlowEventEdGraphNode>(LinkedPin->GetOwningNode()) : nullptr)
 				{
 					if (const int32* LinkedIndex = NodeToIndex.Find(LinkedNode))
 					{
-						FlowNode.NextNodeIndex = *LinkedIndex;
-						break;
+						LinkedIndices.AddUnique(*LinkedIndex);
 					}
+				}
+			}
+
+			if (LinkedIndices.Num() > 0)
+			{
+				FlowNode.NextNodeIndex = LinkedIndices[0];
+				if (LinkedIndices.Num() > 1)
+				{
+					FlowNode.NextMode = EFlowEventNextMode::Parallel;
+				}
+
+				if (FlowNode.NextMode == EFlowEventNextMode::Parallel)
+				{
+					FlowNode.ParallelNextNodeIndices = LinkedIndices;
 				}
 			}
 		}
@@ -342,6 +369,13 @@ void FFlowEventSequenceAssetEditor::OnGraphChanged(const FEdGraphEditAction& Act
 
 void FFlowEventSequenceAssetEditor::OnFinishedChangingProperties(const FPropertyChangedEvent& PropertyChangedEvent)
 {
+	const FName PropertyName = PropertyChangedEvent.GetPropertyName();
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(FFlowEventNode, NextNodeIndex) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(FFlowEventNode, ParallelNextNodeIndices))
+	{
+		SynchronizeGraphLinksFromNodeProperties();
+	}
+
 	if (GraphEditor.IsValid())
 	{
 		GraphEditor->NotifyGraphChanged();
@@ -386,7 +420,10 @@ void FFlowEventSequenceAssetEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
 	}
 
 	FlowGraphNode->Modify();
-	FlowGraphNode->FlowNode.bUseTimelineCurve = true;
+	if (FlowGraphNode->FlowNode.NodeType == EFlowEventNodeType::Event)
+	{
+		FlowGraphNode->FlowNode.bUseTimelineCurve = true;
+	}
 	DetailsView->SetObject(FlowGraphNode);
 	ExportGraphToAsset();
 }
@@ -577,6 +614,72 @@ UFlowEventEdGraphNode* FFlowEventSequenceAssetEditor::CreateGraphNodeFromFlowNod
 	return NewNode;
 }
 
+void FFlowEventSequenceAssetEditor::SynchronizeGraphLinksFromNodeProperties()
+{
+	if (!EditorGraph || bIsSynchronizing)
+	{
+		return;
+	}
+
+	TGuardValue<bool> SynchronizingGuard(bIsSynchronizing, true);
+	const TArray<UFlowEventEdGraphNode*> OrderedNodes = GetOrderedGraphNodes();
+
+	for (int32 Index = 0; Index < OrderedNodes.Num(); ++Index)
+	{
+		UFlowEventEdGraphNode* Node = OrderedNodes[Index];
+		if (!Node)
+		{
+			continue;
+		}
+
+		TArray<int32> DesiredNextIndices;
+		if (Node->FlowNode.NextMode == EFlowEventNextMode::Parallel && Node->FlowNode.ParallelNextNodeIndices.Num() > 0)
+		{
+			for (int32 NextIndex : Node->FlowNode.ParallelNextNodeIndices)
+			{
+				DesiredNextIndices.AddUnique(NextIndex);
+			}
+		}
+		else if (Node->FlowNode.NextNodeIndex == INDEX_NONE)
+		{
+			DesiredNextIndices.Add(Index + 1);
+		}
+		else if (Node->FlowNode.NextNodeIndex != StopNextNodeIndex)
+		{
+			DesiredNextIndices.Add(Node->FlowNode.NextNodeIndex);
+		}
+
+		UEdGraphPin* OutputPin = Node->GetOutputPin();
+		if (!OutputPin)
+		{
+			continue;
+		}
+
+		OutputPin->Modify();
+		OutputPin->BreakAllPinLinks();
+
+		for (int32 NextIndex : DesiredNextIndices)
+		{
+			if (!OrderedNodes.IsValidIndex(NextIndex))
+			{
+				continue;
+			}
+
+			if (UEdGraphPin* InputPin = OrderedNodes[NextIndex] ? OrderedNodes[NextIndex]->GetInputPin() : nullptr)
+			{
+				InputPin->Modify();
+				InputPin->BreakAllPinLinks();
+				OutputPin->MakeLinkTo(InputPin);
+			}
+		}
+	}
+
+	if (EditorGraph)
+	{
+		EditorGraph->NotifyGraphChanged();
+	}
+}
+
 void FFlowEventSequenceAssetEditor::AutoArrangeNodes()
 {
 	if (!EditorGraph)
@@ -586,6 +689,63 @@ void FFlowEventSequenceAssetEditor::AutoArrangeNodes()
 
 	EditorGraph->Modify();
 	const TArray<UFlowEventEdGraphNode*> OrderedNodes = GetOrderedGraphNodes();
+	TMap<UFlowEventEdGraphNode*, int32> NodeColumns;
+	TMap<UFlowEventEdGraphNode*, int32> NodeRows;
+	TSet<UFlowEventEdGraphNode*> VisitedNodes;
+	TArray<UFlowEventEdGraphNode*> Queue;
+
+	if (OrderedNodes.Num() > 0)
+	{
+		NodeColumns.Add(OrderedNodes[0], 0);
+		NodeRows.Add(OrderedNodes[0], 0);
+		Queue.Add(OrderedNodes[0]);
+	}
+
+	while (Queue.Num() > 0)
+	{
+		UFlowEventEdGraphNode* Node = Queue[0];
+		Queue.RemoveAt(0);
+		if (!Node)
+		{
+			continue;
+		}
+
+		if (VisitedNodes.Contains(Node))
+		{
+			continue;
+		}
+
+		VisitedNodes.Add(Node);
+
+		TArray<UFlowEventEdGraphNode*> LinkedNodes;
+		if (UEdGraphPin* OutputPin = Node->GetOutputPin())
+		{
+			for (UEdGraphPin* LinkedPin : OutputPin->LinkedTo)
+			{
+				if (UFlowEventEdGraphNode* LinkedNode = LinkedPin ? Cast<UFlowEventEdGraphNode>(LinkedPin->GetOwningNode()) : nullptr)
+				{
+					LinkedNodes.Add(LinkedNode);
+				}
+			}
+		}
+
+		const int32 ParentColumn = NodeColumns.FindRef(Node);
+		const int32 ParentRow = NodeRows.FindRef(Node);
+		const int32 FirstChildRow = ParentRow - (LinkedNodes.Num() - 1);
+		for (int32 ChildIndex = 0; ChildIndex < LinkedNodes.Num(); ++ChildIndex)
+		{
+			UFlowEventEdGraphNode* LinkedNode = LinkedNodes[ChildIndex];
+			if (!LinkedNode || NodeColumns.Contains(LinkedNode))
+			{
+				continue;
+			}
+
+			NodeColumns.Add(LinkedNode, ParentColumn + 1);
+			NodeRows.Add(LinkedNode, FirstChildRow + ChildIndex * 2);
+			Queue.Add(LinkedNode);
+		}
+	}
+
 	for (int32 Index = 0; Index < OrderedNodes.Num(); ++Index)
 	{
 		UFlowEventEdGraphNode* Node = OrderedNodes[Index];
@@ -594,9 +754,15 @@ void FFlowEventSequenceAssetEditor::AutoArrangeNodes()
 			continue;
 		}
 
+		if (!NodeColumns.Contains(Node))
+		{
+			NodeColumns.Add(Node, Index);
+			NodeRows.Add(Node, 0);
+		}
+
 		Node->Modify();
-		Node->NodePosX = Index * 300;
-		Node->NodePosY = (Index % 2) * 80;
+		Node->NodePosX = NodeColumns.FindRef(Node) * 340;
+		Node->NodePosY = NodeRows.FindRef(Node) * 90;
 	}
 
 	EditorGraph->NotifyGraphChanged();

@@ -51,6 +51,7 @@ private:
 
 	TArray<UFlowEventEdGraphNode*> GetOrderedGraphNodes() const;
 	UFlowEventEdGraphNode* CreateGraphNodeFromFlowNode(const FFlowEventNode& FlowNode, int32 SourceIndex, const FVector2D& FallbackPosition);
+	void SynchronizeGraphLinksFromNodeProperties();
 	void AutoArrangeNodes();
 	void FixNodeIds();
 

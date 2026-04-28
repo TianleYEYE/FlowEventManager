@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added delay nodes that wait for their duration without requiring a target event.
+- Added multi-output parallel branches and branch-aware auto arrangement in the visual editor.
+- Made generated next-node indices read-only so graph links are the source of truth.
 - Added optional two-parameter event signatures so timeline nodes can output both the evaluated curve value and elapsed execution time.
 
 ## 1.1.0

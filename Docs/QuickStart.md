@@ -12,11 +12,13 @@
 1. Create a `Flow Event Sequence` asset in the Content Browser.
 2. Double-click the asset to open the visual flow editor.
 3. Right-click the graph and add flow event nodes.
-4. Connect output pins to input pins to define execution order.
-5. Select a node and configure target selection, event name, duration, and timing mode.
-6. Click `Validate Flow` before saving.
-7. Use `Fix Node IDs` if validation reports empty or duplicate ids.
-8. Use `Auto Arrange` to clean up graph layout.
+4. Add delay nodes when the flow needs to wait without calling a target event.
+5. Connect output pins to input pins to define execution order. Connect one output to multiple inputs to create parallel branches from the same node; node indices are generated from the links.
+6. Select a node and configure target selection, event name, duration, and timing mode.
+7. For delay nodes, configure the duration as the wait time.
+8. Use `Auto Arrange` to align parallel branches in the same column.
+9. Click `Validate Flow` before saving.
+10. Use `Fix Node IDs` if validation reports empty or duplicate ids.
 
 ## Run a Flow
 
@@ -29,7 +31,7 @@ Before starting a flow, call `ValidateConfiguredFlow` if you want to block inval
 
 ## Target Events
 
-Each target Actor should expose a Blueprint event or callable function named by the node's `EventName`.
+Each event node target Actor should expose a Blueprint event or callable function named by the node's `EventName`. Delay nodes do not call target events.
 
 Supported signatures:
 

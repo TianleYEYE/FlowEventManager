@@ -110,6 +110,7 @@ private:
 	void CheckFlowFinished();
 
 	int32 ResolveNextNodeIndex(const FFlowEventNode& Node, int32 CurrentNodeIndex) const;
+	TArray<int32> ResolveNextNodeIndices(const FFlowEventNode& Node, int32 CurrentNodeIndex) const;
 	void ResolveTargets(const FFlowEventNode& Node, TArray<AActor*>& OutTargets) const;
 	bool ExecuteEventOnTarget(AActor* Target, const FFlowEventNode& Node, float OutputValue, float ElapsedTime) const;
 	float EvaluateTimelineValue(const FFlowEventNode& Node, float ElapsedTime) const;
